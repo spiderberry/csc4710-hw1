@@ -492,11 +492,11 @@ class WorldCupDBManager:
         
         try:
             self.db.add_participation(match_id, player_id)
+            self.refresh_match_appearances()
 
-        except ValueError as e:
+        except (ValueError, sqlite3.Error) as e:
+            print(f"Cannot add player appearance: {e}")
             messagebox.showerror("Cannot add player", str(e))
-
-        self.refresh_match_appearances()
 
     def load_player_appearances(self, appearances_list):
         match_id = self.selected_match_id()
@@ -518,8 +518,12 @@ class WorldCupDBManager:
         if match_id is None or not selected:
             messagebox.showerror("Cannot remove player", "Select a match and a player appearance first.")
             return
-        self.db.remove_participation(match_id, int(selected[0]))
-        self.refresh_match_appearances()
+        try:
+            self.db.remove_participation(match_id, int(selected[0]))
+            self.refresh_match_appearances()
+        except (ValueError, sqlite3.Error) as e:
+            print(f"Cannot remove player appearance: {e}")
+            messagebox.showerror("Cannot remove player", str(e))
 
     def refresh_match_appearances(self, event=None):
         self.clear_list(self.appearances_list)
