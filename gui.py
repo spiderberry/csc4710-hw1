@@ -84,6 +84,9 @@ class WorldCupDBManager:
     def teams(self):
         pass
 
+    def new_team(self):
+        self.db.add_team(self.team_nation.get())
+
     def new_player(self):
         self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_id.get())
 

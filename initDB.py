@@ -96,6 +96,33 @@ class Database:
             print(f"Error occurred while retrieving players: {e}")
             raise
 
+    def add_team(self, nation):
+        try:
+            with self.get_connection() as con:
+                cur = con.cursor()
+                cur.execute("""
+                    INSERT INTO team (nation)
+                    VALUES (?)
+                """, (nation,))
+                con.commit()
+                print("Team added successfully.")
+
+        except sqlite3.Error as e:
+            print(f"Error occurred while adding team: {e}")
+            raise
+
+    def get_teams(self):
+        try:
+            with self.get_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT * FROM team")
+                teams = cur.fetchall()
+                return teams
+
+        except sqlite3.Error as e:
+            print(f"Error occurred while retrieving teams: {e}")
+            raise
+
 db = Database()
 cur = db.get_connection().cursor()
 
