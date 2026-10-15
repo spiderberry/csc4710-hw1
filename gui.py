@@ -50,13 +50,6 @@ class WorldCupDBManager:
         mainframe.columnconfigure(2, weight=1)
         for child in mainframe.winfo_children(): 
             child.grid_configure(padx=5, pady=5)
-        
-    def calculate(self, *args):
-        try:
-            value = float(self.player_firstname.get())
-            self.meters.set(round(0.3048 * value, 4))
-        except ValueError:
-            pass
 
     def players(self):
         pass
