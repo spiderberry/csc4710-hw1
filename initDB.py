@@ -328,24 +328,3 @@ class Database:
         with self.get_connection() as con:
             con.execute("DELETE FROM participation WHERE match_id = ? AND player_id = ?", (match_id, player_id))
 
-db = Database()
-cur = db.get_connection().cursor()
-
-
-def table_exists(name):
-    result = cur.execute(
-        """
-        SELECT name
-        FROM sqlite_master
-        WHERE type = 'table' AND name = ?
-        """,
-        (name,)
-    ).fetchone()
-
-    return result is not None
-
-print("player:", table_exists("player"))
-print("team:", table_exists("team"))
-print("match:", table_exists("match"))
-print("participation:", table_exists("participation"))
-#con.close()

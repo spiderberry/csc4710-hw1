@@ -3,13 +3,12 @@ from tkinter import ttk
 from tkinter import messagebox
 from collections import Counter
 import sqlite3
-import initDB
 
 class WorldCupDBManager:
 
-    def __init__(self, root):
+    def __init__(self, root, db):
 
-        self.db = initDB.Database()
+        self.db = db
         self.editing_ids = {"player": None, "team": None, "match": None}
 
         root.title("World Cup 2026 — Database Manager")
@@ -527,6 +526,3 @@ class WorldCupDBManager:
 
     
 
-root = Tk()
-WorldCupDBManager(root)
-root.mainloop()
