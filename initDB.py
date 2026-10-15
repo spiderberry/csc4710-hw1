@@ -305,4 +305,3 @@ class Database:
     def remove_participation(self, match_id, player_id):
         with self.get_connection() as con:
             con.execute("DELETE FROM participation WHERE match_id = ? AND player_id = ?", (match_id, player_id))
-

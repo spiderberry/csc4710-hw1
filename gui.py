@@ -520,6 +520,3 @@ class WorldCupDBManager:
             placeholder = "Select a match first"
 
         self.select_player_menu.set_menu(placeholder, *self.eligible_player_ids)
-
-    
-
