@@ -11,7 +11,6 @@ class Database:
 
     def init_db(self):
         try:
-            con = None
             with self.get_connection() as con:
 
                 print("Database connection established for initialization.")
@@ -69,6 +68,33 @@ class Database:
             if con is not None:
                 con.close()
                 print("Database connection closed.")
+
+    def add_player(self, first_name, last_name, date_of_birth, position, team_id):
+        try:
+            with self.get_connection() as con:
+                cur = con.cursor()
+                cur.execute("""
+                    INSERT INTO player (first_name, last_name, date_of_birth, position, team_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (first_name, last_name, date_of_birth, position, team_id))
+                con.commit()
+                print("Player added successfully.")
+
+        except sqlite3.Error as e:
+            print(f"Error occurred while adding player: {e}")
+            raise
+
+    def get_players(self):
+        try:
+            with self.get_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT * FROM player")
+                players = cur.fetchall()
+                return players
+
+        except sqlite3.Error as e:
+            print(f"Error occurred while retrieving players: {e}")
+            raise
 
 db = Database()
 cur = db.get_connection().cursor()
