@@ -43,6 +43,7 @@ class Database:
                         venue VARCHAR(100) NOT NULL,
                         FOREIGN KEY (home_team) REFERENCES team(team_id) ON DELETE CASCADE,
                         FOREIGN KEY (away_team) REFERENCES team(team_id) ON DELETE CASCADE,
+                        CONSTRAINT unique_match UNIQUE (home_team, away_team, date),
                         CHECK (home_team <> away_team)
                     )
                 """)
