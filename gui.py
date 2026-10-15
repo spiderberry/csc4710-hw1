@@ -515,12 +515,15 @@ class WorldCupDBManager:
     def remove_player_appearance(self):
         match_id = self.selected_match_id()
         selected = self.appearances_list.selection()
+        
         if match_id is None or not selected:
             messagebox.showerror("Cannot remove player", "Select a match and a player appearance first.")
             return
+        
         try:
             self.db.remove_participation(match_id, int(selected[0]))
             self.refresh_match_appearances()
+
         except (ValueError, sqlite3.Error) as e:
             print(f"Cannot remove player appearance: {e}")
             messagebox.showerror("Cannot remove player", str(e))

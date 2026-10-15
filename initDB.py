@@ -12,16 +12,19 @@ class Database:
     @contextmanager
     def get_connection(self):
         con = sqlite3.connect("worldcup.db")
+
         try:
             con.execute("PRAGMA foreign_keys = ON")
             with con:
                 yield con
+
         finally:
             con.close()
 
     def validate_text(self, value, field):
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{field} cannot be blank.")
+        
         return value.strip()
 
     def validate_date(self, value, field):
@@ -29,9 +32,12 @@ class Database:
         try:
             if not re.fullmatch(r"[0-9]{2}/[0-9]{2}/[0-9]{4}", value):
                 raise ValueError
+            
             datetime.strptime(value, "%m/%d/%Y")
+
         except ValueError:
             raise ValueError(f"{field} must be a valid date in MM/DD/YYYY format.") from None
+        
         return value
 
     def init_db(self):
@@ -97,6 +103,7 @@ class Database:
         date_of_birth = self.validate_date(date_of_birth, "Date of birth")
         try:
             with self.get_connection() as con:
+
                 cur = con.cursor()
                 team_id = self.get_team_id(con, team_name)
 
@@ -200,6 +207,7 @@ class Database:
         team = con.execute("SELECT team_id FROM team WHERE nation = ?", (team_name,)).fetchone()
         if team is None:
             raise ValueError(f"Team not found: {team_name}")
+        
         return team[0]
 
     def add_match(self, home_team, away_team, date, venue):
@@ -288,8 +296,10 @@ class Database:
                           WHERE p.match_id = m.match_id AND p.player_id = pl.player_id
                       )
                 """, (match_id, player_id))
+                
                 if cur.rowcount == 0:
                     raise ValueError("Player is not eligible or is already added to this match.")
+                
             print("Participation added successfully.")
 
         except sqlite3.Error as e:
