@@ -122,7 +122,92 @@ class WorldCupDBManager:
         ttk.Button(detailsframe, text="Save", command=self.save).grid(column=1, row=3, sticky=W)
 
     def build_matches_screen(self, parent):
-        return ttk.Frame(parent)
+        screen = ttk.Frame(parent)
+        self.build_match_list(screen)
+        self.build_match_appearances(screen)
+        self.build_match_details(screen)
+        return screen
+
+    def build_match_search(self, screen):
+        search_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
+        search_frame.grid(column=0, row=0, sticky=(N, W, E, S))
+
+        self.match_search = StringVar()
+        match_search_options = ("Search by team", "Search by date")
+        match_search_menu = ttk.OptionMenu(search_frame, self.match_search, match_search_options[0], *match_search_options)
+        match_search_menu.grid(column=1, row=0, sticky=W)
+
+        self.match_search_entry = StringVar()
+        ttk.Entry(search_frame, width=20, textvariable=self.match_search_entry).grid(column=2, row=0, sticky=(W, E))
+
+        ttk.Button(search_frame, text="Search", command=self.search_matches).grid(column=3, row=0, sticky=W)
+        ttk.Button(search_frame, text="Show all").grid(column=4, row=0, sticky=W)
+
+    def build_match_list(self, screen):
+        self.build_match_search(screen)
+        matches_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
+        matches_frame.grid(column=0, row=1, sticky=(N, W, E, S))
+        ttk.Label(matches_frame, text="Matches").grid(column=1, row=1, sticky=W)
+        cols = ("ID", "Home", "Away", "Date", "Venue")
+        self.matches_list = ttk.Treeview(matches_frame, columns=cols, show="headings")
+        self.load_matches(self.matches_list)
+        self.matches_list.grid(column=1, row=2, sticky=(N, W, E, S))
+
+        matches_crud_frame = ttk.Frame(matches_frame, padding=(3, 3, 12, 12))
+        matches_crud_frame.grid(column=1, row=3, sticky=(W))
+        ttk.Button(matches_crud_frame, text="New Match", command=self.new_match).grid(column=1, row=3, sticky=W)
+        ttk.Button(matches_crud_frame, text="Edit Selected", command=self.edit_match).grid(column=2, row=3, sticky=W)
+        ttk.Button(matches_crud_frame, text="Delete Selected", command=self.delete_match).grid(column=3, row=3)
+
+    def build_match_appearances(self, screen):
+        appearances_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
+        appearances_frame.grid(column=0, row=2, sticky=(N, W, E, S))
+        ttk.Label(appearances_frame, text="Player Appearances").grid(column=1, row=1, sticky=W)
+        cols = ("Player", "Team")
+        self.appearances_list = ttk.Treeview(appearances_frame, columns=cols, show="headings")
+        self.load_player_appearances(self.appearances_list)
+        self.appearances_list.grid(column=1, row=2, sticky=(N, W, E, S))
+
+        self.select_player = StringVar()
+        select_player_options = ("Select eligible player", "John Doe", "Jane Smith", "Alice Johnson")
+        select_player_menu = ttk.OptionMenu(appearances_frame, self.select_player, select_player_options[0], *select_player_options)
+        select_player_menu.grid(column=1, row=3, sticky=W)
+
+
+        ttk.Button(appearances_frame, text="Add player", command=self.add_player_appearance).grid(column=2, row=3, sticky=W)
+        ttk.Button(appearances_frame, text="Remove selected", command=self.remove_player_appearance).grid(column=3, row=3, sticky=W)
+
+
+    def build_match_details(self, screen):
+        details_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
+        details_frame.grid(column=1, row=1, sticky=(N, W, E, S))
+        ttk.Label(details_frame, text="Match Details", font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
+
+        ttk.Label(details_frame, text="Home").grid(column=1, row=1, sticky=W)
+        self.home_team_position = StringVar()
+        teams = self.db.get_teams()
+        team_options = [nation for team_id, nation in teams]
+        team_options.insert(0, "Select home team")
+        home_team_menu = ttk.OptionMenu(details_frame, self.home_team_position, team_options[0], *team_options)
+        home_team_menu.grid(column=1, row=2, sticky=(W, E))
+
+        ttk.Label(details_frame, text="Away").grid(column=1, row=3, sticky=W)
+        self.away_team_position = StringVar()
+        team_options.remove("Select home team")
+        team_options.insert(0, "Select away team")
+        away_team_menu = ttk.OptionMenu(details_frame, self.away_team_position, team_options[0], *team_options)
+        away_team_menu.grid(column=1, row=4, sticky=(W, E))
+
+        self.match_date = StringVar()
+        ttk.Label(details_frame, text="Date (MM/DD/YYYY)").grid(column=1, row=5, sticky=W)
+        ttk.Entry(details_frame, width=20, textvariable=self.match_date).grid(column=1, row=6, sticky=(W, E))
+
+        self.match_venue = StringVar()
+        ttk.Label(details_frame, text="Venue").grid(column=1, row=7, sticky=W)
+        ttk.Entry(details_frame, width=20, textvariable=self.match_venue).grid(column=1, row=8, sticky=(W, E))
+
+        ttk.Button(details_frame, text="Save", command=self.save).grid(column=1, row=9, sticky=W)
+
 
     # Navigation and button actions
     def show_view(self, frame):
@@ -136,7 +221,6 @@ class WorldCupDBManager:
         self.show_view(self.players_screen)
         self.clear_list(self.players_list)
         self.load_players(self.players_list)
-        
 
     def matches(self):
         self.show_view(self.matches_screen)
@@ -146,10 +230,53 @@ class WorldCupDBManager:
         self.clear_list(self.teams_list)
         self.load_teams(self.teams_list)
         
-
     def clear_list(self, treeview):
         for item in treeview.get_children():
             treeview.delete(item)
+
+    # Database operations
+
+    def load_player_appearances(self, appearances_list):
+        appearances = self.db.get_detailed_participations()
+
+        for first_name, last_name, team_name in appearances:
+            appearances_list.insert(
+                "",
+                "end",
+                values=(f"{first_name} {last_name}", team_name)
+            )
+
+        for col in appearances_list["columns"]:
+            appearances_list.heading(col, text=col)
+            appearances_list.column(col, width=100, minwidth=60)
+
+    def add_player_appearance(self):
+        pass
+
+    def remove_player_appearance(self):
+        pass
+    
+    def search_matches(self):
+        pass
+
+    def load_matches(self, matches_list):
+        matches = self.db.get_matches()
+
+        for id, home_team, away_team, date, venue in matches:
+            matches_list.insert("", "end", values=(id, home_team, away_team, date, venue))
+
+        for col in matches_list["columns"]:
+            matches_list.heading(col, text=col)
+            matches_list.column(col, width=100, minwidth=60)
+
+    def new_match(self):
+        self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
+
+    def edit_match(self):
+        pass
+
+    def delete_match(self):
+        pass
 
     def load_teams(self, teams_list):
         teams = self.db.get_teams()
