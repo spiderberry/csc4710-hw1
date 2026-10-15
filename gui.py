@@ -53,6 +53,11 @@ class WorldCupDBManager:
         for item in treeview.get_children():
             treeview.delete(item)
 
+    def configure_columns(self, treeview):
+        for col in treeview["columns"]:
+            treeview.heading(col, text=col)
+            treeview.column(col, width=100, minwidth=60)
+
     def edit_record(self, kind, tree, variables):
         selected = tree.selection()
         if not selected:
@@ -205,9 +210,7 @@ class WorldCupDBManager:
         for id, first_name, last_name, date_of_birth, position, team_name in players:
             players_list.insert("", "end", values=(id, first_name, last_name, date_of_birth, position, team_name))
 
-        for col in players_list["columns"]:
-            players_list.heading(col, text=col)
-            players_list.column(col, width=100, minwidth=60)
+        self.configure_columns(players_list)
 
     def edit_player(self):
         self.edit_record("player", self.players_list, (
@@ -279,9 +282,7 @@ class WorldCupDBManager:
         for id, nation in teams:
             teams_list.insert("", "end", values=(id, nation))
 
-        for col in teams_list["columns"]:
-            teams_list.heading(col, text=col)
-            teams_list.column(col, width=100, minwidth=60)
+        self.configure_columns(teams_list)
 
     def edit_team(self):
         self.edit_record("team", self.teams_list, (self.team_nation,))
@@ -372,9 +373,7 @@ class WorldCupDBManager:
         for id, home_team, away_team, date, venue in matches:
             matches_list.insert("", "end", iid=str(id), values=(id, home_team, away_team, date, venue))
 
-        for col in matches_list["columns"]:
-            matches_list.heading(col, text=col)
-            matches_list.column(col, width=100, minwidth=60)
+        self.configure_columns(matches_list)
 
     def edit_match(self):
         self.edit_record("match", self.matches_list, (
@@ -486,9 +485,7 @@ class WorldCupDBManager:
                 values=(f"{first_name} {last_name}", team_name)
             )
 
-        for col in appearances_list["columns"]:
-            appearances_list.heading(col, text=col)
-            appearances_list.column(col, width=100, minwidth=60)
+        self.configure_columns(appearances_list)
 
     def remove_player_appearance(self):
         match_id = self.selected_match_id()
