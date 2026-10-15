@@ -10,6 +10,10 @@ class WorldCupDBManager:
 
         self.db = db
         self.editing_ids = {"player": None, "team": None, "match": None}
+        self.detail_titles = {
+            kind: StringVar(value=f"Add {kind.title()}")
+            for kind in self.editing_ids
+        }
 
         root.title("World Cup 2026 — Database Manager")
 
@@ -66,6 +70,7 @@ class WorldCupDBManager:
         
         values = tree.item(selected[0], "values")
         self.editing_ids[kind] = int(values[0])
+        self.detail_titles[kind].set(f"Update {kind.title()}")
 
         for variable, value in zip(variables, values[1:]):
             variable.set(value)
@@ -77,22 +82,28 @@ class WorldCupDBManager:
             return
         
         record_id = int(tree.item(selected[0], "values")[0])
+        previous_title = self.detail_titles[kind].get()
+        self.detail_titles[kind].set(f"Delete {kind.title()}")
         consequences = {
             "player": "Their appearances will also be deleted.",
             "team": "Its players, matches, and related appearances will also be deleted.",
             "match": "Its player appearances will also be deleted.",
         }
         if not messagebox.askyesno("Confirm deletion", f"Delete {kind} #{record_id}?\n{consequences[kind]}"):
+            self.detail_titles[kind].set(previous_title)
             return
         
         try:
             getattr(self.db, f"delete_{kind}")(record_id)
 
         except sqlite3.Error as e:
+            self.detail_titles[kind].set(previous_title)
             messagebox.showerror("Cannot delete", str(e))
             return
 
         self.editing_ids = {"player": None, "team": None, "match": None}
+        for record_kind, title in self.detail_titles.items():
+            title.set(f"Add {record_kind.title()}")
         self.refresh_records()
 
     def refresh_records(self):
@@ -121,6 +132,8 @@ class WorldCupDBManager:
                 self.match_date.get(), self.match_venue.get(),
             )
         record_id = self.editing_ids[kind]
+        operation = "Add" if record_id is None else "Update"
+        self.detail_titles[kind].set(f"{operation} {kind.title()}")
         try:
             if record_id is None:
                 getattr(self.db, f"add_{kind}")(*values)
@@ -158,7 +171,7 @@ class WorldCupDBManager:
     def build_player_details(self, screen):
         detailsframe = ttk.Frame(screen, padding=(3, 3, 12, 12))
         detailsframe.grid(column=1, row=0, sticky=(N, W, E, S))
-        ttk.Label(detailsframe, text="Player Details", font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
+        ttk.Label(detailsframe, textvariable=self.detail_titles["player"], font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
         
         self.player_firstname = StringVar()
         ttk.Label(detailsframe, text="First Name").grid(column=1, row=1, sticky=W)
@@ -193,6 +206,8 @@ class WorldCupDBManager:
         self.load_players(self.players_list)
 
     def new_player(self):
+        self.editing_ids["player"] = None
+        self.detail_titles["player"].set("Add Player")
         try:
             self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_name.get())
 
@@ -202,7 +217,6 @@ class WorldCupDBManager:
         
         self.clear_list(self.players_list)
         self.load_players(self.players_list)
-        self.editing_ids["player"] = None
 
     def load_players(self, players_list):
         players = self.db.get_players()
@@ -255,7 +269,7 @@ class WorldCupDBManager:
     def build_team_details(self, screen):
         detailsframe = ttk.Frame(screen, padding=(3, 3, 12, 12))
         detailsframe.grid(column=1, row=0, sticky=(N, W, E, S))
-        ttk.Label(detailsframe, text="Team Details", font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
+        ttk.Label(detailsframe, textvariable=self.detail_titles["team"], font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
         
         self.team_nation = StringVar()
         ttk.Label(detailsframe, text="Nation:").grid(column=1, row=1, sticky=W)
@@ -269,8 +283,9 @@ class WorldCupDBManager:
         self.load_teams(self.teams_list)
 
     def new_team(self):
-        self.db.add_team(self.team_nation.get())
         self.editing_ids["team"] = None
+        self.detail_titles["team"].set("Add Team")
+        self.db.add_team(self.team_nation.get())
         self.clear_list(self.teams_list)
         self.load_teams(self.teams_list)
         self.refresh_player_teams()
@@ -334,7 +349,7 @@ class WorldCupDBManager:
     def build_match_details(self, screen):
         details_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
         details_frame.grid(column=1, row=1, sticky=(N, W, E, S))
-        ttk.Label(details_frame, text="Match Details", font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
+        ttk.Label(details_frame, textvariable=self.detail_titles["match"], font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
 
         ttk.Label(details_frame, text="Home").grid(column=1, row=1, sticky=W)
         self.home_team_position = StringVar()
@@ -363,8 +378,9 @@ class WorldCupDBManager:
         self.reload_matches()
 
     def new_match(self):
-        self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
         self.editing_ids["match"] = None
+        self.detail_titles["match"].set("Add Match")
+        self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
         self.reload_matches()
 
     def load_matches(self, matches_list):
