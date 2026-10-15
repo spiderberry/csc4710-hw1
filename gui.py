@@ -224,6 +224,8 @@ class WorldCupDBManager:
 
     def matches(self):
         self.show_view(self.matches_screen)
+        self.clear_list(self.matches_list)
+        self.load_matches(self.matches_list)
 
     def teams(self):
         self.show_view(self.teams_screen)
