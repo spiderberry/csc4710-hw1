@@ -144,6 +144,8 @@ class WorldCupDBManager:
             messagebox.showerror("Cannot save", str(e))
             return
         self.refresh_records()
+        if record_id is None:
+            getattr(self, f"new_{kind}")()
 
     # players 
 
@@ -209,16 +211,15 @@ class WorldCupDBManager:
     def new_player(self):
         self.editing_ids["player"] = None
         self.detail_titles["player"].set("Add Player")
-        try:
-            self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_name.get())
-
-        except (ValueError, sqlite3.Error) as e:
-            print(f"Cannot add player: {e}")
-            messagebox.showerror("Cannot add player", str(e))
-            return
-        
-        self.clear_list(self.players_list)
-        self.load_players(self.players_list)
+        self.player_firstname.set("")
+        self.player_lastname.set("")
+        self.player_dob.set("")
+        self.player_position.set("Forward")
+        self.refresh_player_teams()
+        self.player_team_name.set("Select team")
+        selected = self.players_list.selection()
+        if selected:
+            self.players_list.selection_remove(*selected)
 
     def load_players(self, players_list):
         players = self.db.get_players()
@@ -287,16 +288,10 @@ class WorldCupDBManager:
     def new_team(self):
         self.editing_ids["team"] = None
         self.detail_titles["team"].set("Add Team")
-        try:
-            self.db.add_team(self.team_nation.get())
-        except (ValueError, sqlite3.Error) as e:
-            print(f"Cannot add team: {e}")
-            messagebox.showerror("Cannot add team", str(e))
-            return
-        self.clear_list(self.teams_list)
-        self.load_teams(self.teams_list)
-        self.refresh_player_teams()
-        self.refresh_match_teams()
+        self.team_nation.set("")
+        selected = self.teams_list.selection()
+        if selected:
+            self.teams_list.selection_remove(*selected)
 
     def load_teams(self, teams_list):
         teams = self.db.get_teams()
@@ -387,13 +382,15 @@ class WorldCupDBManager:
     def new_match(self):
         self.editing_ids["match"] = None
         self.detail_titles["match"].set("Add Match")
-        try:
-            self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
-        except (ValueError, sqlite3.Error) as e:
-            print(f"Cannot add match: {e}")
-            messagebox.showerror("Cannot add match", str(e))
-            return
-        self.reload_matches()
+        self.refresh_match_teams()
+        self.home_team_position.set("Select home team")
+        self.away_team_position.set("Select away team")
+        self.match_date.set("")
+        self.match_venue.set("")
+        selected = self.matches_list.selection()
+        if selected:
+            self.matches_list.selection_remove(*selected)
+        self.refresh_match_appearances()
 
     def load_matches(self, matches_list):
         matches = self.db.get_matches()
