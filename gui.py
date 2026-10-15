@@ -140,6 +140,7 @@ class WorldCupDBManager:
             else:
                 getattr(self.db, f"update_{kind}")(record_id, *values)
         except (ValueError, sqlite3.Error) as e:
+            print(f"Cannot save: {e}")
             messagebox.showerror("Cannot save", str(e))
             return
         self.refresh_records()
@@ -211,7 +212,8 @@ class WorldCupDBManager:
         try:
             self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_name.get())
 
-        except ValueError as e:
+        except (ValueError, sqlite3.Error) as e:
+            print(f"Cannot add player: {e}")
             messagebox.showerror("Cannot add player", str(e))
             return
         
@@ -285,7 +287,12 @@ class WorldCupDBManager:
     def new_team(self):
         self.editing_ids["team"] = None
         self.detail_titles["team"].set("Add Team")
-        self.db.add_team(self.team_nation.get())
+        try:
+            self.db.add_team(self.team_nation.get())
+        except (ValueError, sqlite3.Error) as e:
+            print(f"Cannot add team: {e}")
+            messagebox.showerror("Cannot add team", str(e))
+            return
         self.clear_list(self.teams_list)
         self.load_teams(self.teams_list)
         self.refresh_player_teams()
@@ -380,7 +387,12 @@ class WorldCupDBManager:
     def new_match(self):
         self.editing_ids["match"] = None
         self.detail_titles["match"].set("Add Match")
-        self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
+        try:
+            self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
+        except (ValueError, sqlite3.Error) as e:
+            print(f"Cannot add match: {e}")
+            messagebox.showerror("Cannot add match", str(e))
+            return
         self.reload_matches()
 
     def load_matches(self, matches_list):

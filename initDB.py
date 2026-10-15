@@ -1,4 +1,7 @@
 import sqlite3
+import re
+from datetime import datetime
+from contextlib import contextmanager
 
 class Database:
     # Database setup
@@ -6,10 +9,30 @@ class Database:
     def __init__(self):
         self.init_db()
 
+    @contextmanager
     def get_connection(self):
         con = sqlite3.connect("worldcup.db")
-        con.execute("PRAGMA foreign_keys = ON")
-        return con
+        try:
+            con.execute("PRAGMA foreign_keys = ON")
+            with con:
+                yield con
+        finally:
+            con.close()
+
+    def validate_text(self, value, field):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field} cannot be blank.")
+        return value.strip()
+
+    def validate_date(self, value, field):
+        value = self.validate_text(value, field)
+        try:
+            if not re.fullmatch(r"[0-9]{2}/[0-9]{2}/[0-9]{4}", value):
+                raise ValueError
+            datetime.strptime(value, "%m/%d/%Y")
+        except ValueError:
+            raise ValueError(f"{field} must be a valid date in MM/DD/YYYY format.") from None
+        return value
 
     def init_db(self):
         try:
@@ -62,17 +85,16 @@ class Database:
                 """)
 
             print("Database initialized successfully.")
+            print("Database connection closed.")
 
         except sqlite3.Error as e:
             print(f"Error occurred while initializing the database: {e}")
             raise
 
-        finally:
-            if con is not None:
-                con.close()
-                print("Database connection closed.")
-
     def add_player(self, first_name, last_name, date_of_birth, position, team_name):
+        first_name = self.validate_text(first_name, "First name")
+        last_name = self.validate_text(last_name, "Last name")
+        date_of_birth = self.validate_date(date_of_birth, "Date of birth")
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
@@ -110,6 +132,9 @@ class Database:
             raise
 
     def update_player(self, player_id, first_name, last_name, date_of_birth, position, team_name):
+        first_name = self.validate_text(first_name, "First name")
+        last_name = self.validate_text(last_name, "Last name")
+        date_of_birth = self.validate_date(date_of_birth, "Date of birth")
         with self.get_connection() as con:
             team_id = self.get_team_id(con, team_name)
             invalid = con.execute("""
@@ -135,6 +160,7 @@ class Database:
             con.execute("DELETE FROM player WHERE player_id = ?", (player_id,))
 
     def add_team(self, nation):
+        nation = self.validate_text(nation, "Nation")
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
@@ -159,6 +185,7 @@ class Database:
             raise
 
     def update_team(self, team_id, nation):
+        nation = self.validate_text(nation, "Nation")
         with self.get_connection() as con:
             cur = con.execute("UPDATE team SET nation = ? WHERE team_id = ?", (nation, team_id))
 
@@ -176,6 +203,8 @@ class Database:
         return team[0]
 
     def add_match(self, home_team, away_team, date, venue):
+        date = self.validate_date(date, "Match date")
+        venue = self.validate_text(venue, "Venue")
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
@@ -214,6 +243,8 @@ class Database:
             raise
 
     def update_match(self, match_id, home_team, away_team, date, venue):
+        date = self.validate_date(date, "Match date")
+        venue = self.validate_text(venue, "Venue")
         with self.get_connection() as con:
             home_team_id = self.get_team_id(con, home_team)
             away_team_id = self.get_team_id(con, away_team)
