@@ -13,6 +13,15 @@ class WorldCupDBManager:
         mainframe = ttk.Frame(root, padding=(3, 3, 12, 12))
         mainframe.grid(column=0, row=0, sticky=(N, W, E, S))
 
+        self.players_screen = ttk.Frame(mainframe)
+        self.players_screen.grid(column=1, row=2, columnspan=2, sticky=(N, W, E, S))
+
+        self.teams_screen = ttk.Frame(mainframe)
+        self.teams_screen.grid(column=1, row=2, columnspan=2, sticky=(N, W, E, S))
+
+        self.matches_screen = ttk.Frame(mainframe)
+        self.matches_screen.grid(column=1, row=2, columnspan=2, sticky=(N, W, E, S))
+
         ttk.Label(mainframe, text="World Cup 2026 Database Manager", font=("Helvetica", 16)).grid(column=1, row=0, columnspan=3, sticky=W)
         
         navigation_frame = ttk.Frame(mainframe, padding=(3, 3, 12, 12))
@@ -21,9 +30,8 @@ class WorldCupDBManager:
         ttk.Button(navigation_frame, text="Teams", command=self.teams).grid(column=2, row=0, sticky=W)
         ttk.Button(navigation_frame, text="Matches", command=self.matches).grid(column=3, row=0, sticky=W)
 
-        self.current_view = "players"
-        playersframe = ttk.Frame(mainframe, padding=(3, 3, 12, 12))
-        playersframe.grid(column=1, row=2, sticky=(N, W, E, S))
+        playersframe = ttk.Frame(self.players_screen, padding=(3, 3, 12, 12))
+        playersframe.grid(column=0, row=0, sticky=(N, W, E, S))
         ttk.Label(playersframe, text="Players").grid(column=1, row=1, sticky=W)
         cols = ("ID", "First Name", "Last Name", "Date of Birth", "Position", "Team ID")
         self.players_list = ttk.Treeview(playersframe, columns=cols, show="headings")
@@ -36,8 +44,8 @@ class WorldCupDBManager:
         ttk.Button(playercrud_frame, text="Edit Selected", command=self.edit_player).grid(column=2, row=0, sticky=W)
         ttk.Button(playercrud_frame, text="Delete Selected", command=self.delete_player).grid(column=3, row=0, sticky=W)
 
-        detailsframe = ttk.Frame(mainframe, padding=(3, 3, 12, 12))
-        detailsframe.grid(column=2, row=2, sticky=(N, W, E, S))
+        detailsframe = ttk.Frame(self.players_screen, padding=(3, 3, 12, 12))
+        detailsframe.grid(column=1, row=0, sticky=(N, W, E, S))
 
         ttk.Label(detailsframe, text="Player Details", font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
         
@@ -55,12 +63,9 @@ class WorldCupDBManager:
         
         self.player_position = StringVar()
         positions = ("Forward", "Midfielder", "Defender", "Goalkeeper")
-        selected_position = StringVar()
-        selected_position.set(positions[0])  # Set default value
         ttk.Label(detailsframe, text="Position:").grid(column=1, row=7, sticky=W)
-        position_menu = ttk.OptionMenu(detailsframe, selected_position, *positions)
+        position_menu = ttk.OptionMenu(detailsframe, self.player_position, positions[0], *positions)
         position_menu.grid(column=1, row=8, sticky=(W, E))
-        self.player_position.set(selected_position.get())
 
         self.player_team_id = StringVar()
         ttk.Label(detailsframe, text="Team:").grid(column=1, row=9, sticky=W)
@@ -73,16 +78,31 @@ class WorldCupDBManager:
         mainframe.columnconfigure(2, weight=1)
         for child in mainframe.winfo_children(): 
             child.grid_configure(padx=5, pady=5)
-        self.current_view = "players"
 
+        self.teams_screen.grid_remove()
+        self.matches_screen.grid_remove()
+        
+        self.current_view = self.players_screen
+        self.current_view.grid()
+        
+
+    def show_view(self, frame):
+        if self.current_view is not None:
+            self.current_view.grid_remove()
+
+        self.current_view = frame
+        self.current_view.grid()
+    
     def players(self):
-        pass
+        self.show_view(self.players_screen)
+        
 
     def matches(self):
-        pass
+        self.show_view(self.matches_screen)
 
     def teams(self):
-        pass
+        self.show_view(self.teams_screen)
+        
 
     def new_team(self):
         self.db.add_team(self.team_nation.get())
