@@ -1,5 +1,7 @@
 from tkinter import *
 from tkinter import ttk
+from tkinter import messagebox
+from collections import Counter
 import initDB
 
 class WorldCupDBManager:
@@ -31,6 +33,7 @@ class WorldCupDBManager:
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         mainframe.columnconfigure(2, weight=1)
+        
         for child in mainframe.winfo_children(): 
             child.grid_configure(padx=5, pady=5)
 
@@ -49,7 +52,7 @@ class WorldCupDBManager:
         playersframe = ttk.Frame(screen, padding=(3, 3, 12, 12))
         playersframe.grid(column=0, row=0, sticky=(N, W, E, S))
         ttk.Label(playersframe, text="Players").grid(column=1, row=1, sticky=W)
-        cols = ("ID", "First Name", "Last Name", "Date of Birth", "Position", "Team ID")
+        cols = ("ID", "First Name", "Last Name", "Date of Birth", "Position", "Team")
         self.players_list = ttk.Treeview(playersframe, columns=cols, show="headings")
         self.load_players(self.players_list)
         self.players_list.grid(column=1, row=2, sticky=(N, W, E, S))
@@ -66,26 +69,28 @@ class WorldCupDBManager:
         ttk.Label(detailsframe, text="Player Details", font=("Helvetica", 14)).grid(column=1, row=0, columnspan=3, sticky=W)
         
         self.player_firstname = StringVar()
-        ttk.Label(detailsframe, text="First Name:").grid(column=1, row=1, sticky=W)
+        ttk.Label(detailsframe, text="First Name").grid(column=1, row=1, sticky=W)
         ttk.Entry(detailsframe, width=20, textvariable=self.player_firstname).grid(column=1, row=2, sticky=(W, E))
         
         self.player_lastname = StringVar()
-        ttk.Label(detailsframe, text="Last Name:").grid(column=1, row=3, sticky=W)
+        ttk.Label(detailsframe, text="Last Name").grid(column=1, row=3, sticky=W)
         ttk.Entry(detailsframe, width=20, textvariable=self.player_lastname).grid(column=1, row=4, sticky=(W, E))
         
         self.player_dob = StringVar()
-        ttk.Label(detailsframe, text="Date of Birth (MM/DD/YYYY):").grid(column=1, row=5, sticky=W)
+        ttk.Label(detailsframe, text="Date of Birth (MM/DD/YYYY)").grid(column=1, row=5, sticky=W)
         ttk.Entry(detailsframe, width=20, textvariable=self.player_dob).grid(column=1, row=6, sticky=(W, E))
         
         self.player_position = StringVar()
         positions = ("Forward", "Midfielder", "Defender", "Goalkeeper")
-        ttk.Label(detailsframe, text="Position:").grid(column=1, row=7, sticky=W)
+        ttk.Label(detailsframe, text="Position").grid(column=1, row=7, sticky=W)
         position_menu = ttk.OptionMenu(detailsframe, self.player_position, positions[0], *positions)
         position_menu.grid(column=1, row=8, sticky=(W, E))
 
-        self.player_team_id = StringVar()
-        ttk.Label(detailsframe, text="Team:").grid(column=1, row=9, sticky=W)
-        ttk.Entry(detailsframe, width=20, textvariable=self.player_team_id).grid(column=1, row=10, sticky=(W, E))
+        self.player_team_name = StringVar()
+        ttk.Label(detailsframe, text="Team").grid(column=1, row=9, sticky=W)
+        self.player_team_menu = ttk.OptionMenu(detailsframe, self.player_team_name, "Select team")
+        self.refresh_player_teams()
+        self.player_team_menu.grid(column=1, row=10, sticky=(W, E))
 
         ttk.Button(detailsframe, text="Save", command=self.save).grid(column=1, row=11, sticky=W)
 
@@ -150,6 +155,7 @@ class WorldCupDBManager:
         ttk.Label(matches_frame, text="Matches").grid(column=1, row=1, sticky=W)
         cols = ("ID", "Home", "Away", "Date", "Venue")
         self.matches_list = ttk.Treeview(matches_frame, columns=cols, show="headings")
+        self.matches_list.bind("<<TreeviewSelect>>", self.refresh_match_appearances)
         self.load_matches(self.matches_list)
         self.matches_list.grid(column=1, row=2, sticky=(N, W, E, S))
 
@@ -169,9 +175,9 @@ class WorldCupDBManager:
         self.appearances_list.grid(column=1, row=2, sticky=(N, W, E, S))
 
         self.select_player = StringVar()
-        select_player_options = ("Select eligible player", "John Doe", "Jane Smith", "Alice Johnson")
-        select_player_menu = ttk.OptionMenu(appearances_frame, self.select_player, select_player_options[0], *select_player_options)
-        select_player_menu.grid(column=1, row=3, sticky=W)
+        self.eligible_player_ids = {}
+        self.select_player_menu = ttk.OptionMenu(appearances_frame, self.select_player, "Select a match first")
+        self.select_player_menu.grid(column=1, row=3, sticky=W)
 
 
         ttk.Button(appearances_frame, text="Add player", command=self.add_player_appearance).grid(column=2, row=3, sticky=W)
@@ -185,18 +191,14 @@ class WorldCupDBManager:
 
         ttk.Label(details_frame, text="Home").grid(column=1, row=1, sticky=W)
         self.home_team_position = StringVar()
-        teams = self.db.get_teams()
-        team_options = [nation for team_id, nation in teams]
-        team_options.insert(0, "Select home team")
-        home_team_menu = ttk.OptionMenu(details_frame, self.home_team_position, team_options[0], *team_options)
-        home_team_menu.grid(column=1, row=2, sticky=(W, E))
+        self.home_team_menu = ttk.OptionMenu(details_frame, self.home_team_position, "Select home team")
+        self.home_team_menu.grid(column=1, row=2, sticky=(W, E))
 
         ttk.Label(details_frame, text="Away").grid(column=1, row=3, sticky=W)
         self.away_team_position = StringVar()
-        team_options.remove("Select home team")
-        team_options.insert(0, "Select away team")
-        away_team_menu = ttk.OptionMenu(details_frame, self.away_team_position, team_options[0], *team_options)
-        away_team_menu.grid(column=1, row=4, sticky=(W, E))
+        self.away_team_menu = ttk.OptionMenu(details_frame, self.away_team_position, "Select away team")
+        self.away_team_menu.grid(column=1, row=4, sticky=(W, E))
+        self.refresh_match_teams()
 
         self.match_date = StringVar()
         ttk.Label(details_frame, text="Date (MM/DD/YYYY)").grid(column=1, row=5, sticky=W)
@@ -219,13 +221,14 @@ class WorldCupDBManager:
     
     def players(self):
         self.show_view(self.players_screen)
+        self.refresh_player_teams()
         self.clear_list(self.players_list)
         self.load_players(self.players_list)
 
     def matches(self):
         self.show_view(self.matches_screen)
-        self.clear_list(self.matches_list)
-        self.load_matches(self.matches_list)
+        self.refresh_match_teams()
+        self.reload_matches()
 
     def teams(self):
         self.show_view(self.teams_screen)
@@ -239,12 +242,14 @@ class WorldCupDBManager:
     # Database operations
 
     def load_player_appearances(self, appearances_list):
-        appearances = self.db.get_detailed_participations()
+        match_id = self.selected_match_id()
+        appearances = self.db.get_detailed_participations(match_id) if match_id is not None else []
 
-        for first_name, last_name, team_name in appearances:
+        for player_id, first_name, last_name, team_name in appearances:
             appearances_list.insert(
                 "",
                 "end",
+                iid=str(player_id),
                 values=(f"{first_name} {last_name}", team_name)
             )
 
@@ -252,8 +257,54 @@ class WorldCupDBManager:
             appearances_list.heading(col, text=col)
             appearances_list.column(col, width=100, minwidth=60)
 
+    def selected_match_id(self):
+        selected = self.matches_list.selection()
+
+        if not selected:
+            return None
+        
+        return int(self.matches_list.item(selected[0], "values")[0])
+
+    def refresh_match_appearances(self, event=None):
+        self.clear_list(self.appearances_list)
+        self.load_player_appearances(self.appearances_list)
+
+        match_id = self.selected_match_id()
+        players = self.db.get_eligible_players(match_id) if match_id is not None else []
+        labels = [f"{first} {last} ({team})" for player_id, first, last, team in players]
+        counts = Counter(labels)
+
+        self.eligible_player_ids = {
+            (f"{label} [ID {player[0]}]" if counts[label] > 1 else label): player[0]
+            for label, player in zip(labels, players)
+        }
+
+        if players:
+            placeholder = "Select eligible player"
+        else:
+            placeholder = "No eligible players"
+
+        if match_id is None:
+            placeholder = "Select a match first"
+
+        self.select_player_menu.set_menu(placeholder, *self.eligible_player_ids)
+
     def add_player_appearance(self):
-        pass
+        match_id = self.selected_match_id()
+        player_id = self.eligible_player_ids.get(self.select_player.get())
+
+        if match_id is None or player_id is None:
+            messagebox.showerror("Cannot add player", "Select a match and an eligible player first.")
+
+            return
+        
+        try:
+            self.db.add_participation(match_id, player_id)
+
+        except ValueError as e:
+            messagebox.showerror("Cannot add player", str(e))
+
+        self.refresh_match_appearances()
 
     def remove_player_appearance(self):
         pass
@@ -265,7 +316,7 @@ class WorldCupDBManager:
         matches = self.db.get_matches()
 
         for id, home_team, away_team, date, venue in matches:
-            matches_list.insert("", "end", values=(id, home_team, away_team, date, venue))
+            matches_list.insert("", "end", iid=str(id), values=(id, home_team, away_team, date, venue))
 
         for col in matches_list["columns"]:
             matches_list.heading(col, text=col)
@@ -273,6 +324,26 @@ class WorldCupDBManager:
 
     def new_match(self):
         self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
+        self.reload_matches()
+
+    def reload_matches(self):
+        match_id = self.selected_match_id()
+        self.clear_list(self.matches_list)
+        self.load_matches(self.matches_list)
+        if match_id is not None and self.matches_list.exists(str(match_id)):
+            self.matches_list.selection_set(str(match_id))
+        self.refresh_match_appearances()
+
+    def refresh_match_teams(self):
+        team_names = [nation for team_id, nation in self.db.get_teams()]
+        for menu, variable, placeholder in (
+            (self.home_team_menu, self.home_team_position, "Select home team"),
+            (self.away_team_menu, self.away_team_position, "Select away team"),
+        ):
+            selected_team = variable.get()
+            menu.set_menu(placeholder, *team_names)
+            if selected_team in team_names:
+                variable.set(selected_team)
 
     def edit_match(self):
         pass
@@ -292,6 +363,10 @@ class WorldCupDBManager:
         
     def new_team(self):
         self.db.add_team(self.team_nation.get())
+        self.clear_list(self.teams_list)
+        self.load_teams(self.teams_list)
+        self.refresh_player_teams()
+        self.refresh_match_teams()
 
     def edit_team(self):
         pass
@@ -302,15 +377,31 @@ class WorldCupDBManager:
     def load_players(self, players_list):
         players = self.db.get_players()
 
-        for id, first_name, last_name, date_of_birth, position, team_id in players:
-            players_list.insert("", "end", values=(id, first_name, last_name, date_of_birth, position, team_id))
+        for id, first_name, last_name, date_of_birth, position, team_name in players:
+            players_list.insert("", "end", values=(id, first_name, last_name, date_of_birth, position, team_name))
 
         for col in players_list["columns"]:
             players_list.heading(col, text=col)
             players_list.column(col, width=100, minwidth=60)
 
+    def refresh_player_teams(self):
+        team_names = [nation for team_id, nation in self.db.get_teams()]
+        selected_team = self.player_team_name.get()
+        self.player_team_menu.set_menu("Select team", *team_names)
+
+        if selected_team in team_names:
+            self.player_team_name.set(selected_team)
+
     def new_player(self):
-        self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_id.get())
+        try:
+            self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_name.get())
+
+        except ValueError as e:
+            messagebox.showerror("Cannot add player", str(e))
+            return
+        
+        self.clear_list(self.players_list)
+        self.load_players(self.players_list)
 
     def edit_player(self):
         pass

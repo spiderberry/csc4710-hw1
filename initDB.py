@@ -75,8 +75,17 @@ class Database:
                 cur = con.cursor()
                 cur.execute("""
                     INSERT INTO participation (match_id, player_id)
-                    VALUES (?, ?)
+                    SELECT m.match_id, pl.player_id
+                    FROM match m JOIN player pl
+                        ON pl.team_id IN (m.home_team, m.away_team)
+                    WHERE m.match_id = ? AND pl.player_id = ?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM participation p
+                          WHERE p.match_id = m.match_id AND p.player_id = pl.player_id
+                      )
                 """, (match_id, player_id))
+                if cur.rowcount == 0:
+                    raise ValueError("Player is not eligible or is already added to this match.")
                 con.commit()
                 print("Participation added successfully.")
 
@@ -96,20 +105,38 @@ class Database:
                 print(f"Error occurred while retrieving participations: {e}")
                 raise
 
-    def get_detailed_participations(self):
+    def get_eligible_players(self, match_id):
+        with self.get_connection() as con:
+            return con.execute("""
+                SELECT pl.player_id, pl.first_name, pl.last_name, t.nation
+                FROM player pl
+                JOIN team t ON pl.team_id = t.team_id
+                JOIN match m ON pl.team_id IN (m.home_team, m.away_team)
+                WHERE m.match_id = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM participation p
+                      WHERE p.match_id = m.match_id AND p.player_id = pl.player_id
+                  )
+                ORDER BY pl.last_name, pl.first_name, pl.player_id
+            """, (match_id,)).fetchall()
+
+    def get_detailed_participations(self, match_id):
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
 
                 cur.execute("""
                     SELECT
+                        pl.player_id,
                         pl.first_name,
                         pl.last_name,
                         t.nation AS team_name
                     FROM participation p
                     JOIN player pl ON p.player_id = pl.player_id
                     JOIN team t ON pl.team_id = t.team_id
-                """)
+                    WHERE p.match_id = ?
+                    ORDER BY pl.last_name, pl.first_name, pl.player_id
+                """, (match_id,))
 
                 detailed_participations = cur.fetchall()
                 return detailed_participations
@@ -148,7 +175,17 @@ class Database:
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
-                cur.execute("SELECT match_id, t.nation AS home_team, t2.nation AS away_team, date, venue FROM match m JOIN team t ON m.home_team = t.team_id JOIN team t2 ON m.away_team = t2.team_id")
+                cur.execute("""
+                    SELECT
+                        match_id,
+                        t.nation AS home_team,
+                        t2.nation AS away_team,
+                        date,
+                        venue
+                    FROM match m
+                    JOIN team t ON m.home_team = t.team_id
+                    JOIN team t2 ON m.away_team = t2.team_id
+                """)
                 matches = cur.fetchall()
                 return matches
 
@@ -156,14 +193,25 @@ class Database:
             print(f"Error occurred while retrieving matches: {e}")
             raise
     
-    def add_player(self, first_name, last_name, date_of_birth, position, team_id):
+    def add_player(self, first_name, last_name, date_of_birth, position, team_name):
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
+                cur.execute("SELECT team_id FROM team WHERE nation = ?", (team_name,))
+                team_row = cur.fetchone()
+                if team_row is None:
+                    raise ValueError(f"Team not found: {team_name}")
+
                 cur.execute("""
-                    INSERT INTO player (first_name, last_name, date_of_birth, position, team_id)
+                    INSERT INTO player (
+                        first_name,
+                        last_name,
+                        date_of_birth,
+                        position,
+                        team_id
+                    )
                     VALUES (?, ?, ?, ?, ?)
-                """, (first_name, last_name, date_of_birth, position, team_id))
+                """, (first_name, last_name, date_of_birth, position, team_row[0]))
                 con.commit()
                 print("Player added successfully.")
 
@@ -175,7 +223,12 @@ class Database:
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
-                cur.execute("SELECT * FROM player")
+                cur.execute("""
+                    SELECT p.player_id, p.first_name, p.last_name,
+                           p.date_of_birth, p.position, t.nation
+                    FROM player p
+                    JOIN team t ON p.team_id = t.team_id
+                """)
                 players = cur.fetchall()
                 return players
 
