@@ -1,6 +1,8 @@
 import sqlite3
 
 class Database:
+    # Database setup
+
     def __init__(self):
         self.init_db()
 
@@ -70,82 +72,114 @@ class Database:
                 con.close()
                 print("Database connection closed.")
 
-    def add_participation(self, match_id, player_id):
+    def add_player(self, first_name, last_name, date_of_birth, position, team_name):
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
+                cur.execute("SELECT team_id FROM team WHERE nation = ?", (team_name,))
+                team_row = cur.fetchone()
+                if team_row is None:
+                    raise ValueError(f"Team not found: {team_name}")
+
                 cur.execute("""
-                    INSERT INTO participation (match_id, player_id)
-                    SELECT m.match_id, pl.player_id
-                    FROM match m JOIN player pl
-                        ON pl.team_id IN (m.home_team, m.away_team)
-                    WHERE m.match_id = ? AND pl.player_id = ?
-                      AND NOT EXISTS (
-                          SELECT 1 FROM participation p
-                          WHERE p.match_id = m.match_id AND p.player_id = pl.player_id
-                      )
-                """, (match_id, player_id))
-                if cur.rowcount == 0:
-                    raise ValueError("Player is not eligible or is already added to this match.")
+                    INSERT INTO player (
+                        first_name,
+                        last_name,
+                        date_of_birth,
+                        position,
+                        team_id
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                """, (first_name, last_name, date_of_birth, position, team_row[0]))
                 con.commit()
-                print("Participation added successfully.")
+                print("Player added successfully.")
 
         except sqlite3.Error as e:
-            print(f"Error occurred while adding participation: {e}")
+            print(f"Error occurred while adding player: {e}")
             raise
 
-    def get_participations(self):
-            try:
-                with self.get_connection() as con:
-                    cur = con.cursor()
-                    cur.execute("SELECT * FROM participation")
-                    participations = cur.fetchall()
-                    return participations
-
-            except sqlite3.Error as e:
-                print(f"Error occurred while retrieving participations: {e}")
-                raise
-
-    def get_eligible_players(self, match_id):
-        with self.get_connection() as con:
-            return con.execute("""
-                SELECT pl.player_id, pl.first_name, pl.last_name, t.nation
-                FROM player pl
-                JOIN team t ON pl.team_id = t.team_id
-                JOIN match m ON pl.team_id IN (m.home_team, m.away_team)
-                WHERE m.match_id = ?
-                  AND NOT EXISTS (
-                      SELECT 1 FROM participation p
-                      WHERE p.match_id = m.match_id AND p.player_id = pl.player_id
-                  )
-                ORDER BY pl.last_name, pl.first_name, pl.player_id
-            """, (match_id,)).fetchall()
-
-    def get_detailed_participations(self, match_id):
+    def get_players(self):
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
-
                 cur.execute("""
-                    SELECT
-                        pl.player_id,
-                        pl.first_name,
-                        pl.last_name,
-                        t.nation AS team_name
-                    FROM participation p
-                    JOIN player pl ON p.player_id = pl.player_id
-                    JOIN team t ON pl.team_id = t.team_id
-                    WHERE p.match_id = ?
-                    ORDER BY pl.last_name, pl.first_name, pl.player_id
-                """, (match_id,))
-
-                detailed_participations = cur.fetchall()
-                return detailed_participations
+                    SELECT p.player_id, p.first_name, p.last_name,
+                           p.date_of_birth, p.position, t.nation
+                    FROM player p
+                    JOIN team t ON p.team_id = t.team_id
+                """)
+                players = cur.fetchall()
+                return players
 
         except sqlite3.Error as e:
-            print(f"Error occurred while retrieving detailed participations: {e}")
+            print(f"Error occurred while retrieving players: {e}")
             raise
-    
+
+    def update_player(self, player_id, first_name, last_name, date_of_birth, position, team_name):
+        with self.get_connection() as con:
+            team = con.execute("SELECT team_id FROM team WHERE nation = ?", (team_name,)).fetchone()
+            if team is None:
+                raise ValueError(f"Team not found: {team_name}")
+            invalid = con.execute("""
+                SELECT 1 FROM participation p
+                JOIN match m ON p.match_id = m.match_id
+                WHERE p.player_id = ? AND ? NOT IN (m.home_team, m.away_team)
+            """, (player_id, team[0])).fetchone()
+
+            if invalid:
+                raise ValueError("Remove this player's appearances in incompatible matches before changing teams.")
+            
+            cur = con.execute("""
+                UPDATE player
+                SET first_name = ?, last_name = ?, date_of_birth = ?, position = ?, team_id = ?
+                WHERE player_id = ?
+            """, (first_name, last_name, date_of_birth, position, team[0], player_id))
+
+            if cur.rowcount == 0:
+                raise ValueError("Player no longer exists.")
+
+    def delete_player(self, player_id):
+        with self.get_connection() as con:
+            con.execute("DELETE FROM player WHERE player_id = ?", (player_id,))
+
+    def add_team(self, nation):
+        try:
+            with self.get_connection() as con:
+                cur = con.cursor()
+                cur.execute("""
+                    INSERT INTO team (nation)
+                    VALUES (?)
+                """, (nation,))
+                con.commit()
+                print("Team added successfully.")
+
+        except sqlite3.Error as e:
+            print(f"Error occurred while adding team: {e}")
+            raise
+
+    def get_teams(self):
+        try:
+            with self.get_connection() as con:
+                cur = con.cursor()
+                cur.execute("SELECT * FROM team")
+                teams = cur.fetchall()
+                return teams
+
+        except sqlite3.Error as e:
+            print(f"Error occurred while retrieving teams: {e}")
+            raise
+
+    def update_team(self, team_id, nation):
+        with self.get_connection() as con:
+            cur = con.execute("UPDATE team SET nation = ? WHERE team_id = ?", (nation, team_id))
+
+            if cur.rowcount == 0:
+                raise ValueError("Team no longer exists.")
+
+    def delete_team(self, team_id):
+        with self.get_connection() as con:
+            con.execute("DELETE FROM team WHERE team_id = ?", (team_id,))
+
     def add_match(self, home_team, away_team, date, venue):
         try:
             with self.get_connection() as con:
@@ -193,76 +227,106 @@ class Database:
         except sqlite3.Error as e:
             print(f"Error occurred while retrieving matches: {e}")
             raise
-    
-    def add_player(self, first_name, last_name, date_of_birth, position, team_name):
+
+    def update_match(self, match_id, home_team, away_team, date, venue):
+        with self.get_connection() as con:
+            home = con.execute("SELECT team_id FROM team WHERE nation = ?", (home_team,)).fetchone()
+            away = con.execute("SELECT team_id FROM team WHERE nation = ?", (away_team,)).fetchone()
+
+            if home is None or away is None:
+                raise ValueError("Select valid home and away teams.")
+            
+            if home[0] == away[0]:
+                raise ValueError("Home and away teams must be different.")
+            
+            invalid = con.execute("""
+                SELECT 1 FROM participation p
+                JOIN player pl ON p.player_id = pl.player_id
+                WHERE p.match_id = ? AND pl.team_id NOT IN (?, ?)
+            """, (match_id, home[0], away[0])).fetchone()
+
+            if invalid:
+                raise ValueError("Remove appearances from incompatible teams before changing this match's teams.")
+            
+            cur = con.execute("""
+                UPDATE match SET home_team = ?, away_team = ?, date = ?, venue = ?
+                WHERE match_id = ?
+            """, (home[0], away[0], date, venue, match_id))
+
+            if cur.rowcount == 0:
+                raise ValueError("Match no longer exists.")
+
+    def delete_match(self, match_id):
+        with self.get_connection() as con:
+            con.execute("DELETE FROM match WHERE match_id = ?", (match_id,))
+
+    def add_participation(self, match_id, player_id):
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
-                cur.execute("SELECT team_id FROM team WHERE nation = ?", (team_name,))
-                team_row = cur.fetchone()
-                if team_row is None:
-                    raise ValueError(f"Team not found: {team_name}")
-
                 cur.execute("""
-                    INSERT INTO player (
-                        first_name,
-                        last_name,
-                        date_of_birth,
-                        position,
-                        team_id
-                    )
-                    VALUES (?, ?, ?, ?, ?)
-                """, (first_name, last_name, date_of_birth, position, team_row[0]))
+                    INSERT INTO participation (match_id, player_id)
+                    SELECT m.match_id, pl.player_id
+                    FROM match m JOIN player pl
+                        ON pl.team_id IN (m.home_team, m.away_team)
+                    WHERE m.match_id = ? AND pl.player_id = ?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM participation p
+                          WHERE p.match_id = m.match_id AND p.player_id = pl.player_id
+                      )
+                """, (match_id, player_id))
+                if cur.rowcount == 0:
+                    raise ValueError("Player is not eligible or is already added to this match.")
                 con.commit()
-                print("Player added successfully.")
+                print("Participation added successfully.")
 
         except sqlite3.Error as e:
-            print(f"Error occurred while adding player: {e}")
+            print(f"Error occurred while adding participation: {e}")
             raise
 
-    def get_players(self):
+    def get_detailed_participations(self, match_id):
         try:
             with self.get_connection() as con:
                 cur = con.cursor()
+
                 cur.execute("""
-                    SELECT p.player_id, p.first_name, p.last_name,
-                           p.date_of_birth, p.position, t.nation
-                    FROM player p
-                    JOIN team t ON p.team_id = t.team_id
-                """)
-                players = cur.fetchall()
-                return players
+                    SELECT
+                        pl.player_id,
+                        pl.first_name,
+                        pl.last_name,
+                        t.nation AS team_name
+                    FROM participation p
+                    JOIN player pl ON p.player_id = pl.player_id
+                    JOIN team t ON pl.team_id = t.team_id
+                    WHERE p.match_id = ?
+                    ORDER BY pl.last_name, pl.first_name, pl.player_id
+                """, (match_id,))
+
+                detailed_participations = cur.fetchall()
+                return detailed_participations
 
         except sqlite3.Error as e:
-            print(f"Error occurred while retrieving players: {e}")
+            print(f"Error occurred while retrieving detailed participations: {e}")
             raise
 
-    def add_team(self, nation):
-        try:
-            with self.get_connection() as con:
-                cur = con.cursor()
-                cur.execute("""
-                    INSERT INTO team (nation)
-                    VALUES (?)
-                """, (nation,))
-                con.commit()
-                print("Team added successfully.")
+    def get_eligible_players(self, match_id):
+        with self.get_connection() as con:
+            return con.execute("""
+                SELECT pl.player_id, pl.first_name, pl.last_name, t.nation
+                FROM player pl
+                JOIN team t ON pl.team_id = t.team_id
+                JOIN match m ON pl.team_id IN (m.home_team, m.away_team)
+                WHERE m.match_id = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM participation p
+                      WHERE p.match_id = m.match_id AND p.player_id = pl.player_id
+                  )
+                ORDER BY pl.last_name, pl.first_name, pl.player_id
+            """, (match_id,)).fetchall()
 
-        except sqlite3.Error as e:
-            print(f"Error occurred while adding team: {e}")
-            raise
-
-    def get_teams(self):
-        try:
-            with self.get_connection() as con:
-                cur = con.cursor()
-                cur.execute("SELECT * FROM team")
-                teams = cur.fetchall()
-                return teams
-
-        except sqlite3.Error as e:
-            print(f"Error occurred while retrieving teams: {e}")
-            raise
+    def remove_participation(self, match_id, player_id):
+        with self.get_connection() as con:
+            con.execute("DELETE FROM participation WHERE match_id = ? AND player_id = ?", (match_id, player_id))
 
 db = Database()
 cur = db.get_connection().cursor()

@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter import ttk
 from tkinter import messagebox
 from collections import Counter
+import sqlite3
 import initDB
 
 class WorldCupDBManager:
@@ -9,6 +10,7 @@ class WorldCupDBManager:
     def __init__(self, root):
 
         self.db = initDB.Database()
+        self.editing_ids = {"player": None, "team": None, "match": None}
 
         root.title("World Cup 2026 — Database Manager")
 
@@ -40,6 +42,92 @@ class WorldCupDBManager:
         self.teams_screen.grid_remove()
         self.matches_screen.grid_remove()
         self.current_view = self.players_screen
+
+    def show_view(self, frame):
+        if self.current_view is not None:
+            self.current_view.grid_remove()
+
+        self.current_view = frame
+        self.current_view.grid()
+
+    def clear_list(self, treeview):
+        for item in treeview.get_children():
+            treeview.delete(item)
+
+    def edit_record(self, kind, tree, variables):
+        selected = tree.selection()
+        if not selected:
+            messagebox.showerror("Cannot edit", f"Select a {kind} first.")
+            return
+        
+        values = tree.item(selected[0], "values")
+        self.editing_ids[kind] = int(values[0])
+
+        for variable, value in zip(variables, values[1:]):
+            variable.set(value)
+
+    def delete_record(self, kind, tree):
+        selected = tree.selection()
+        if not selected:
+            messagebox.showerror("Cannot delete", f"Select a {kind} first.")
+            return
+        
+        record_id = int(tree.item(selected[0], "values")[0])
+        consequences = {
+            "player": "Their appearances will also be deleted.",
+            "team": "Its players, matches, and related appearances will also be deleted.",
+            "match": "Its player appearances will also be deleted.",
+        }
+        if not messagebox.askyesno("Confirm deletion", f"Delete {kind} #{record_id}?\n{consequences[kind]}"):
+            return
+        
+        try:
+            getattr(self.db, f"delete_{kind}")(record_id)
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Cannot delete", str(e))
+            return
+
+        self.editing_ids = {"player": None, "team": None, "match": None}
+        self.refresh_records()
+
+    def refresh_records(self):
+        self.clear_list(self.players_list)
+        self.load_players(self.players_list)
+        self.clear_list(self.teams_list)
+        self.load_teams(self.teams_list)
+        self.refresh_player_teams()
+        self.refresh_match_teams()
+        self.reload_matches()
+
+    def save(self):
+        if self.current_view == self.players_screen:
+            kind = "player"
+            values = (
+                self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(),
+                self.player_position.get(), self.player_team_name.get(),
+            )
+        elif self.current_view == self.teams_screen:
+            kind = "team"
+            values = (self.team_nation.get(),)
+        else:
+            kind = "match"
+            values = (
+                self.home_team_position.get(), self.away_team_position.get(),
+                self.match_date.get(), self.match_venue.get(),
+            )
+        record_id = self.editing_ids[kind]
+        try:
+            if record_id is None:
+                getattr(self.db, f"add_{kind}")(*values)
+            else:
+                getattr(self.db, f"update_{kind}")(record_id, *values)
+        except (ValueError, sqlite3.Error) as e:
+            messagebox.showerror("Cannot save", str(e))
+            return
+        self.refresh_records()
+
+    # players 
 
     def build_players_screen(self, parent):
         screen = ttk.Frame(parent)
@@ -94,6 +182,53 @@ class WorldCupDBManager:
 
         ttk.Button(detailsframe, text="Save", command=self.save).grid(column=1, row=11, sticky=W)
 
+    def players(self):
+        self.show_view(self.players_screen)
+        self.refresh_player_teams()
+        self.clear_list(self.players_list)
+        self.load_players(self.players_list)
+
+    def new_player(self):
+        try:
+            self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_name.get())
+
+        except ValueError as e:
+            messagebox.showerror("Cannot add player", str(e))
+            return
+        
+        self.clear_list(self.players_list)
+        self.load_players(self.players_list)
+        self.editing_ids["player"] = None
+
+    def load_players(self, players_list):
+        players = self.db.get_players()
+
+        for id, first_name, last_name, date_of_birth, position, team_name in players:
+            players_list.insert("", "end", values=(id, first_name, last_name, date_of_birth, position, team_name))
+
+        for col in players_list["columns"]:
+            players_list.heading(col, text=col)
+            players_list.column(col, width=100, minwidth=60)
+
+    def edit_player(self):
+        self.edit_record("player", self.players_list, (
+            self.player_firstname, self.player_lastname, self.player_dob,
+            self.player_position, self.player_team_name,
+        ))
+
+    def delete_player(self):
+        self.delete_record("player", self.players_list)
+
+    def refresh_player_teams(self):
+        team_names = [nation for team_id, nation in self.db.get_teams()]
+        selected_team = self.player_team_name.get()
+        self.player_team_menu.set_menu("Select team", *team_names)
+
+        if selected_team in team_names:
+            self.player_team_name.set(selected_team)
+
+    # teams
+
     def build_teams_screen(self, parent):
         screen = ttk.Frame(parent)
         self.build_teams_list(screen)
@@ -126,6 +261,37 @@ class WorldCupDBManager:
 
         ttk.Button(detailsframe, text="Save", command=self.save).grid(column=1, row=3, sticky=W)
 
+    def teams(self):
+        self.show_view(self.teams_screen)
+        self.clear_list(self.teams_list)
+        self.load_teams(self.teams_list)
+
+    def new_team(self):
+        self.db.add_team(self.team_nation.get())
+        self.editing_ids["team"] = None
+        self.clear_list(self.teams_list)
+        self.load_teams(self.teams_list)
+        self.refresh_player_teams()
+        self.refresh_match_teams()
+
+    def load_teams(self, teams_list):
+        teams = self.db.get_teams()
+
+        for id, nation in teams:
+            teams_list.insert("", "end", values=(id, nation))
+
+        for col in teams_list["columns"]:
+            teams_list.heading(col, text=col)
+            teams_list.column(col, width=100, minwidth=60)
+
+    def edit_team(self):
+        self.edit_record("team", self.teams_list, (self.team_nation,))
+
+    def delete_team(self):
+        self.delete_record("team", self.teams_list)
+
+    # Matches view
+
     def build_matches_screen(self, parent):
         screen = ttk.Frame(parent)
         self.build_match_list(screen)
@@ -138,7 +304,7 @@ class WorldCupDBManager:
         search_frame.grid(column=0, row=0, sticky=(N, W, E, S))
 
         self.match_search = StringVar()
-        match_search_options = ("Search by team", "Search by date")
+        match_search_options = ("Search by team", "Search by date", "Search by player")
         match_search_menu = ttk.OptionMenu(search_frame, self.match_search, match_search_options[0], *match_search_options)
         match_search_menu.grid(column=1, row=0, sticky=W)
 
@@ -146,7 +312,7 @@ class WorldCupDBManager:
         ttk.Entry(search_frame, width=20, textvariable=self.match_search_entry).grid(column=2, row=0, sticky=(W, E))
 
         ttk.Button(search_frame, text="Search", command=self.search_matches).grid(column=3, row=0, sticky=W)
-        ttk.Button(search_frame, text="Show all").grid(column=4, row=0, sticky=W)
+        ttk.Button(search_frame, text="Show all", command=self.reload_matches).grid(column=4, row=0, sticky=W)
 
     def build_match_list(self, screen):
         self.build_match_search(screen)
@@ -164,25 +330,6 @@ class WorldCupDBManager:
         ttk.Button(matches_crud_frame, text="New Match", command=self.new_match).grid(column=1, row=3, sticky=W)
         ttk.Button(matches_crud_frame, text="Edit Selected", command=self.edit_match).grid(column=2, row=3, sticky=W)
         ttk.Button(matches_crud_frame, text="Delete Selected", command=self.delete_match).grid(column=3, row=3)
-
-    def build_match_appearances(self, screen):
-        appearances_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
-        appearances_frame.grid(column=0, row=2, sticky=(N, W, E, S))
-        ttk.Label(appearances_frame, text="Player Appearances").grid(column=1, row=1, sticky=W)
-        cols = ("Player", "Team")
-        self.appearances_list = ttk.Treeview(appearances_frame, columns=cols, show="headings")
-        self.load_player_appearances(self.appearances_list)
-        self.appearances_list.grid(column=1, row=2, sticky=(N, W, E, S))
-
-        self.select_player = StringVar()
-        self.eligible_player_ids = {}
-        self.select_player_menu = ttk.OptionMenu(appearances_frame, self.select_player, "Select a match first")
-        self.select_player_menu.grid(column=1, row=3, sticky=W)
-
-
-        ttk.Button(appearances_frame, text="Add player", command=self.add_player_appearance).grid(column=2, row=3, sticky=W)
-        ttk.Button(appearances_frame, text="Remove selected", command=self.remove_player_appearance).grid(column=3, row=3, sticky=W)
-
 
     def build_match_details(self, screen):
         details_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
@@ -210,52 +357,55 @@ class WorldCupDBManager:
 
         ttk.Button(details_frame, text="Save", command=self.save).grid(column=1, row=9, sticky=W)
 
-
-    # Navigation and button actions
-    def show_view(self, frame):
-        if self.current_view is not None:
-            self.current_view.grid_remove()
-
-        self.current_view = frame
-        self.current_view.grid()
-    
-    def players(self):
-        self.show_view(self.players_screen)
-        self.refresh_player_teams()
-        self.clear_list(self.players_list)
-        self.load_players(self.players_list)
-
     def matches(self):
         self.show_view(self.matches_screen)
         self.refresh_match_teams()
         self.reload_matches()
 
-    def teams(self):
-        self.show_view(self.teams_screen)
-        self.clear_list(self.teams_list)
-        self.load_teams(self.teams_list)
-        
-    def clear_list(self, treeview):
-        for item in treeview.get_children():
-            treeview.delete(item)
+    def new_match(self):
+        self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
+        self.editing_ids["match"] = None
+        self.reload_matches()
 
-    # Database operations
+    def load_matches(self, matches_list):
+        matches = self.db.get_matches()
 
-    def load_player_appearances(self, appearances_list):
+        for id, home_team, away_team, date, venue in matches:
+            matches_list.insert("", "end", iid=str(id), values=(id, home_team, away_team, date, venue))
+
+        for col in matches_list["columns"]:
+            matches_list.heading(col, text=col)
+            matches_list.column(col, width=100, minwidth=60)
+
+    def edit_match(self):
+        self.edit_record("match", self.matches_list, (
+            self.home_team_position, self.away_team_position, self.match_date, self.match_venue,
+        ))
+
+    def delete_match(self):
+        self.delete_record("match", self.matches_list)
+
+    def reload_matches(self):
         match_id = self.selected_match_id()
-        appearances = self.db.get_detailed_participations(match_id) if match_id is not None else []
+        self.clear_list(self.matches_list)
+        self.load_matches(self.matches_list)
 
-        for player_id, first_name, last_name, team_name in appearances:
-            appearances_list.insert(
-                "",
-                "end",
-                iid=str(player_id),
-                values=(f"{first_name} {last_name}", team_name)
-            )
+        if match_id is not None and self.matches_list.exists(str(match_id)):
+            self.matches_list.selection_set(str(match_id))
 
-        for col in appearances_list["columns"]:
-            appearances_list.heading(col, text=col)
-            appearances_list.column(col, width=100, minwidth=60)
+        self.refresh_match_appearances()
+
+    def refresh_match_teams(self):
+        team_names = [nation for team_id, nation in self.db.get_teams()]
+
+        for menu, variable, placeholder in (
+            (self.home_team_menu, self.home_team_position, "Select home team"),
+            (self.away_team_menu, self.away_team_position, "Select away team"),
+        ):
+            selected_team = variable.get()
+            menu.set_menu(placeholder, *team_names)
+            if selected_team in team_names:
+                variable.set(selected_team)
 
     def selected_match_id(self):
         selected = self.matches_list.selection()
@@ -265,29 +415,48 @@ class WorldCupDBManager:
         
         return int(self.matches_list.item(selected[0], "values")[0])
 
-    def refresh_match_appearances(self, event=None):
-        self.clear_list(self.appearances_list)
+    def search_matches(self):
+        search_query = self.match_search_entry.get().strip().lower()
+        self.clear_list(self.matches_list)
+
+        for match in self.db.get_matches():
+            match_id, home_team, away_team, date, venue = match
+            if self.match_search.get() == "Search by team":
+                fields = (home_team, away_team)
+
+            elif self.match_search.get() == "Search by player":
+                fields = [
+                    f"{first_name} {last_name}"
+                    for player_id, first_name, last_name, team_name
+                    in self.db.get_detailed_participations(match_id)
+                ]
+            else:
+                fields = (date,)
+
+            if any(search_query in field.lower() for field in fields):
+                self.matches_list.insert("", "end", iid=str(match_id), values=match)
+
+        self.refresh_match_appearances()
+
+    # player appearances
+
+    def build_match_appearances(self, screen):
+        appearances_frame = ttk.Frame(screen, padding=(3, 3, 12, 12))
+        appearances_frame.grid(column=0, row=2, sticky=(N, W, E, S))
+        ttk.Label(appearances_frame, text="Player Appearances").grid(column=1, row=1, sticky=W)
+        cols = ("Player", "Team")
+        self.appearances_list = ttk.Treeview(appearances_frame, columns=cols, show="headings")
         self.load_player_appearances(self.appearances_list)
+        self.appearances_list.grid(column=1, row=2, sticky=(N, W, E, S))
 
-        match_id = self.selected_match_id()
-        players = self.db.get_eligible_players(match_id) if match_id is not None else []
-        labels = [f"{first} {last} ({team})" for player_id, first, last, team in players]
-        counts = Counter(labels)
+        self.select_player = StringVar()
+        self.eligible_player_ids = {}
+        self.select_player_menu = ttk.OptionMenu(appearances_frame, self.select_player, "Select a match first")
+        self.select_player_menu.grid(column=1, row=3, sticky=W)
 
-        self.eligible_player_ids = {
-            (f"{label} [ID {player[0]}]" if counts[label] > 1 else label): player[0]
-            for label, player in zip(labels, players)
-        }
 
-        if players:
-            placeholder = "Select eligible player"
-        else:
-            placeholder = "No eligible players"
-
-        if match_id is None:
-            placeholder = "Select a match first"
-
-        self.select_player_menu.set_menu(placeholder, *self.eligible_player_ids)
+        ttk.Button(appearances_frame, text="Add player", command=self.add_player_appearance).grid(column=2, row=3, sticky=W)
+        ttk.Button(appearances_frame, text="Remove selected", command=self.remove_player_appearance).grid(column=3, row=3, sticky=W)
 
     def add_player_appearance(self):
         match_id = self.selected_match_id()
@@ -306,111 +475,55 @@ class WorldCupDBManager:
 
         self.refresh_match_appearances()
 
-    def remove_player_appearance(self):
-        pass
-    
-    def search_matches(self):
-        pass
-
-    def load_matches(self, matches_list):
-        matches = self.db.get_matches()
-
-        for id, home_team, away_team, date, venue in matches:
-            matches_list.insert("", "end", iid=str(id), values=(id, home_team, away_team, date, venue))
-
-        for col in matches_list["columns"]:
-            matches_list.heading(col, text=col)
-            matches_list.column(col, width=100, minwidth=60)
-
-    def new_match(self):
-        self.db.add_match(self.home_team_position.get(), self.away_team_position.get(), self.match_date.get(), self.match_venue.get())
-        self.reload_matches()
-
-    def reload_matches(self):
+    def load_player_appearances(self, appearances_list):
         match_id = self.selected_match_id()
-        self.clear_list(self.matches_list)
-        self.load_matches(self.matches_list)
-        if match_id is not None and self.matches_list.exists(str(match_id)):
-            self.matches_list.selection_set(str(match_id))
+        appearances = self.db.get_detailed_participations(match_id) if match_id is not None else []
+
+        for player_id, first_name, last_name, team_name in appearances:
+            appearances_list.insert(
+                "",
+                "end",
+                iid=str(player_id),
+                values=(f"{first_name} {last_name}", team_name)
+            )
+
+        for col in appearances_list["columns"]:
+            appearances_list.heading(col, text=col)
+            appearances_list.column(col, width=100, minwidth=60)
+
+    def remove_player_appearance(self):
+        match_id = self.selected_match_id()
+        selected = self.appearances_list.selection()
+        if match_id is None or not selected:
+            messagebox.showerror("Cannot remove player", "Select a match and a player appearance first.")
+            return
+        self.db.remove_participation(match_id, int(selected[0]))
         self.refresh_match_appearances()
 
-    def refresh_match_teams(self):
-        team_names = [nation for team_id, nation in self.db.get_teams()]
-        for menu, variable, placeholder in (
-            (self.home_team_menu, self.home_team_position, "Select home team"),
-            (self.away_team_menu, self.away_team_position, "Select away team"),
-        ):
-            selected_team = variable.get()
-            menu.set_menu(placeholder, *team_names)
-            if selected_team in team_names:
-                variable.set(selected_team)
+    def refresh_match_appearances(self, event=None):
+        self.clear_list(self.appearances_list)
+        self.load_player_appearances(self.appearances_list)
 
-    def edit_match(self):
-        pass
+        match_id = self.selected_match_id()
+        players = self.db.get_eligible_players(match_id) if match_id is not None else []
+        labels = [f"{first} {last} ({team})" for player_id, first, last, team in players]
+        counts = Counter(labels)
 
-    def delete_match(self):
-        pass
+        self.eligible_player_ids = {
+            (f"{label} [ID {player[0]}]" if counts[label] > 1 else label): player[0]
+            for label, player in zip(labels, players)
+        }
 
-    def load_teams(self, teams_list):
-        teams = self.db.get_teams()
+        if players:
+            placeholder = "Select eligible player"
 
-        for id, nation in teams:
-            teams_list.insert("", "end", values=(id, nation))
+        else:
+            placeholder = "No eligible players"
 
-        for col in teams_list["columns"]:
-            teams_list.heading(col, text=col)
-            teams_list.column(col, width=100, minwidth=60)
-        
-    def new_team(self):
-        self.db.add_team(self.team_nation.get())
-        self.clear_list(self.teams_list)
-        self.load_teams(self.teams_list)
-        self.refresh_player_teams()
-        self.refresh_match_teams()
+        if match_id is None:
+            placeholder = "Select a match first"
 
-    def edit_team(self):
-        pass
-
-    def delete_team(self):
-        pass
-
-    def load_players(self, players_list):
-        players = self.db.get_players()
-
-        for id, first_name, last_name, date_of_birth, position, team_name in players:
-            players_list.insert("", "end", values=(id, first_name, last_name, date_of_birth, position, team_name))
-
-        for col in players_list["columns"]:
-            players_list.heading(col, text=col)
-            players_list.column(col, width=100, minwidth=60)
-
-    def refresh_player_teams(self):
-        team_names = [nation for team_id, nation in self.db.get_teams()]
-        selected_team = self.player_team_name.get()
-        self.player_team_menu.set_menu("Select team", *team_names)
-
-        if selected_team in team_names:
-            self.player_team_name.set(selected_team)
-
-    def new_player(self):
-        try:
-            self.db.add_player(self.player_firstname.get(), self.player_lastname.get(), self.player_dob.get(), self.player_position.get(), self.player_team_name.get())
-
-        except ValueError as e:
-            messagebox.showerror("Cannot add player", str(e))
-            return
-        
-        self.clear_list(self.players_list)
-        self.load_players(self.players_list)
-
-    def edit_player(self):
-        pass
-
-    def delete_player(self):
-        pass
-
-    def save(self):
-        pass
+        self.select_player_menu.set_menu(placeholder, *self.eligible_player_ids)
 
     
 
