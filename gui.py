@@ -54,9 +54,14 @@ class WorldCupDBManager:
         ttk.Entry(detailsframe, width=20, textvariable=self.player_dob).grid(column=1, row=6, sticky=(W, E))
         
         self.player_position = StringVar()
+        positions = ("Forward", "Midfielder", "Defender", "Goalkeeper")
+        selected_position = StringVar()
+        selected_position.set(positions[0])  # Set default value
         ttk.Label(detailsframe, text="Position:").grid(column=1, row=7, sticky=W)
-        ttk.Entry(detailsframe, width=20, textvariable=self.player_position).grid(column=1, row=8, sticky=(W, E))
-        
+        position_menu = ttk.OptionMenu(detailsframe, selected_position, *positions)
+        position_menu.grid(column=1, row=8, sticky=(W, E))
+        self.player_position.set(selected_position.get())
+
         self.player_team_id = StringVar()
         ttk.Label(detailsframe, text="Team:").grid(column=1, row=9, sticky=W)
         ttk.Entry(detailsframe, width=20, textvariable=self.player_team_id).grid(column=1, row=10, sticky=(W, E))
